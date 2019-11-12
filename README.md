@@ -1,2 +1,10 @@
-# threadpoool_sample
-a cross-platform threadpool in C.
+# threadpool for windows and linux
+
+## windows
+
+  build with vs2015
+
+
+## linux
+
+  make
