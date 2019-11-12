@@ -53,9 +53,9 @@
 #endif
 
 
-#if !defined(__WINDOWS__)
-// link to pthread-w32 lib
+#if defined(__WINDOWS__) && !defined(__CYGWIN__)
 # if defined (_MSC_VER)
+// link to pthread-w32 lib only for MS Windows
 #   pragma comment(lib, "pthreadVC2.lib")
 # else
 #   pragma comment(lib, "pthreadGC2.lib")
@@ -475,12 +475,14 @@ int pthread_attr_init_config (pthread_attr_t *pattr, int stack_size, int scope, 
 
 	/**
 	 *  scope specified the value PTHREAD_SCOPE_PROCESS, which is not supported on Linux.
-	 *  Linux supports PTHREAD_SCOPE_SYSTEM, but not PTHREAD_SCOPE_PROCESS.
+	 *  Linux ONLY supports PTHREAD_SCOPE_SYSTEM, not the PTHREAD_SCOPE_PROCESS.
 	 */
     if (pthread_attr_setscope(pattr, scope) != 0 && scope != PTHREAD_SCOPE_PROCESS) {
-		printf("pthread_attr_setscope error: %s\n", strerror(errno));
-		pthread_attr_destroy(pattr);
-		return -1;
+        if (errno) {
+		    printf("pthread_attr_setscope error: %s\n", strerror(errno));
+		    pthread_attr_destroy(pattr);
+		    return -1;
+        }
 	}
 
 	if (pthread_attr_setdetachstate(pattr, joinable) != 0) {

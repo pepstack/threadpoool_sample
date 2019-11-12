@@ -78,6 +78,10 @@ int main(int argc, char *argv[])
 
     printf("[main] create threadpool with task buffer size=%d.\n", TEST_TASK_BUFSIZE);
     threadpool_t * pool = threadpool_create(TEST_THREADS_COUNT, TEST_QUEUES_COUNT, TEST_STACK_SIZE, 0, (void**)dbpool, TEST_TASK_BUFSIZE);
+    if (!pool) {
+        printf("[main] threadpool_create failed !\n");
+        exit(EXIT_FAILURE);
+    }
 
     while (count++ < 1000) {
         pertask_argument_t * argument = (pertask_argument_t *)malloc(sizeof(pertask_argument_t) + 256);
