@@ -30,6 +30,7 @@ main: main.o threadpool.o
 clean:
 	-rm -f $(PREFIX)/threadpool.o
 	-rm -f $(PREFIX)/main.o
+	-rm -f $(PREFIX)/main
 	-rm -f $(PREFIX)/main.exe
 
 check: all
