@@ -23,6 +23,10 @@
     <ClCompile Include="..\src\threadpool.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\cstrbuf.h" />
+    <ClInclude Include="..\src\memapi.h" />
+    <ClInclude Include="..\src\misc.h" />
+    <ClInclude Include="..\src\mscrtdbg.h" />
     <ClInclude Include="..\src\threadpool.h" />
     <ClInclude Include="..\src\unitypes.h" />
   </ItemGroup>

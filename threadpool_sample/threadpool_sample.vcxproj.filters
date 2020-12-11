@@ -29,5 +29,17 @@
     <ClInclude Include="..\src\unitypes.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\memapi.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\misc.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\mscrtdbg.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\cstrbuf.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

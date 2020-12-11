@@ -55,6 +55,7 @@
 
 #if defined(__WINDOWS__) && !defined(__CYGWIN__)
 # if defined (_MSC_VER)
+# pragma warning(disable:4996)
 // link to pthread-w32 lib only for MS Windows
 #   pragma comment(lib, "pthreadVC2.lib")
 # else

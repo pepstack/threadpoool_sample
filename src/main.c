@@ -4,6 +4,7 @@
  * @author     Liang Zhang <350137278@qq.com>
  * @create     2019-11-11
  */
+#include "misc.h"
 
 #include "threadpool.h"
 
