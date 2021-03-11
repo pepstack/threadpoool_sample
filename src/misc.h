@@ -30,7 +30,7 @@
  * @author     Liang Zhang <350137278@qq.com>
  * @version    0.0.10
  * @create     2017-08-28 11:12:10
- * @update     2020-12-12 22:55:37
+ * @update     2021-03-13 22:55:37
  */
 #ifndef _MISC_H_
 #define _MISC_H_
@@ -49,56 +49,19 @@ extern "C"
   typedef HANDLE filehandle_t;
 
 # define filehandle_invalid INVALID_HANDLE_VALUE
+# define fseek_pos_set    ((int)FILE_BEGIN)
+# define fseek_pos_cur    ((int)FILE_CURRENT)
+# define fseek_pos_end    ((int)FILE_END)
+
 # define getprocessid()  ((int)GetCurrentProcessId())
 # define getthreadid()   ((int) GetCurrentThreadId())
 
-static void sleep_msec(int milliseconds)
-{
-    Sleep(milliseconds);
-}
-
-
-static void sleep_usec(int microseconds)
-{
-    int ms = microseconds / 1000;
-    int us = microseconds % 1000;
-
-    if (ms > 0) {
-        Sleep(ms);
-    }
-
-    if (us > 0) {
-        LARGE_INTEGER lval = { 0 };
-        LONGLONG startTime;
-        double cpuFreq, delayTimeUs = 0;
-
-        // get cpuFreq
-        if (!QueryPerformanceFrequency(&lval)) {
-            return;
-        }
-        cpuFreq = (double)lval.QuadPart;
-        if (cpuFreq < 1000) {
-            return;
-        }
-
-        // get startTime
-        if (!QueryPerformanceCounter(&lval)) {
-            return;
-        }
-        startTime = lval.QuadPart;
-
-        do {
-            Sleep(0);
-
-            if (!QueryPerformanceCounter(&lval)) {
-                return;
-            }
-            delayTimeUs = (((double)(lval.QuadPart - startTime)) / cpuFreq) * 1000000;
-        } while (delayTimeUs < us);
-    }
-}
-
 #else /* non-windows: Linux or Cygwin */
+
+/* See feature_test_macros(7) */
+#ifndef _LARGEFILE64_SOURCE
+# define _LARGEFILE64_SOURCE
+#endif
 
 # include <sys/types.h>
 # include <sys/stat.h>
@@ -121,287 +84,18 @@ NOWARNING_UNUSED(static) pid_t getthreadid(void)
 {
     return syscall(SYS_gettid);
 }
-# endif 
+# endif
 
 # define getprocessid()   ((int)getpid())
 
 typedef int filehandle_t;
 # define filehandle_invalid ((filehandle_t)(-1))
 
-# define _TIMESPEC_DEFINED
-
-// sleep in milliseconds
-NOWARNING_UNUSED(static) void sleep_msec(int milliseconds)
-{
-    if (milliseconds > 0) {
-        struct timespec ts;
-        ts.tv_sec = milliseconds / 1000;
-        ts.tv_nsec = (milliseconds % 1000) * 1000000;
-        nanosleep(&ts, 0);
-    }
-}
-
-// sleep in micro seconds, do not use usleep
-NOWARNING_UNUSED(static) void sleep_usec(int us)
-{
-    if (us > 0) {
-        /**
-        * 1 sec = 1000 ms (millisec)
-        * 1 ms = 1000 us (microsec)
-        * 1 us = 1000 ns (nanosec)
-        * 1 sec = 1000 000 000 ns (nanosec)
-        */
-        struct timespec ts;
-
-        ts.tv_sec = us / 1000000;
-        ts.tv_nsec = (us % 1000000) * 1000;
-
-        nanosleep(&ts, 0);
-    }
-}
+# define fseek_pos_set    ((int)SEEK_SET)
+# define fseek_pos_cur    ((int)SEEK_CUR)
+# define fseek_pos_end    ((int)SEEK_END)
 
 #endif
-
-
-/**
- * time api
- */
-NOWARNING_UNUSED(static)
-const char *timezone_format(long tz, char *tzfmt)
-{
-    if (tz < 0) {
-        snprintf_chkd_V1(tzfmt, 5 + 1, "+%02d%02d", -(int)(tz / 3600), -(int)((tz % 3600) / 60));
-    } else if (tz > 0) {
-        snprintf_chkd_V1(tzfmt, 5 + 1, "-%02d%02d", (int)(tz / 3600), (int)((tz % 3600) / 60));
-    } else {
-        /* UTC */
-        memcpy(tzfmt, "+0000", 5);
-    }
-    tzfmt[5] = 0;
-    return tzfmt;
-}
-
-
-NOWARNING_UNUSED(static)
-long timezone_compute(time_t ts, char *tzfmt)
-{
-    long tz;
-    time_t ut;
-    struct tm t;
-
-#if defined(__WINDOWS__)
-    if (gmtime_s(&t, &ts) != (errno_t)0) {
-        /* error */
-        perror("gmtime_s\n");
-        return (-1);
-    }
-    ut = mktime(&t);
-#else
-    if (!gmtime_r(&ts, &t)) {
-        /* error */
-        perror("gmtime\n");
-        return (-1);
-    }
-    ut = mktime(&t);
-#endif
-
-    tz = (long)difftime(ut, ts);
-    if (tzfmt) {
-        timezone_format(tz, tzfmt);
-    }
-
-    return tz;
-}
-
-
-NOWARNING_UNUSED(static)
-int daylight_compute(time_t ts)
-{
-    struct tm tm;
-    tm.tm_isdst = 0;
-
-#if defined(__WINDOWS__)
-    localtime_s(&tm, &ts);
-#else
-    localtime_r(&ts, &tm);
-#endif
-
-    return tm.tm_isdst;
-}
-
-
-NOWARNING_UNUSED(static)
-void getnowtimeofday(struct timespec *now)
-{
-#if defined(_WIN32)
-    FILETIME tmfile;
-    ULARGE_INTEGER _100nanos;
-
-    GetSystemTimeAsFileTime(&tmfile);
-
-    _100nanos.LowPart   = tmfile.dwLowDateTime;
-    _100nanos.HighPart  = tmfile.dwHighDateTime; 
-    _100nanos.QuadPart -= 0x19DB1DED53E8000;
-
-    /* Convert 100ns units to seconds */
-    now->tv_sec = (time_t)(_100nanos.QuadPart / (10000 * 1000));
-
-    /* Convert remainder to nanoseconds */
-    now->tv_nsec = (long) ((_100nanos.QuadPart % (10000 * 1000)) * 100);
-#else
-    if (clock_gettime(CLOCK_REALTIME, now) == -1) {
-        /* must be successful */
-        perror("clock_gettime");
-        exit(EXIT_FAILURE);
-    }
-#endif
-}
-
-
-/**
- * taken from: redis/src/localtime.c
- *   although localtime_s on windows is a bit faster than getlocaltime_safe,
- *   here we use getlocaltime_safe due to it cross-platforms.
- */
-NOWARNING_UNUSED(static)
-void getlocaltime_safe(struct tm *loc, int64_t t, int tz, int dst)
-{
-/**
- * A year not divisible by 4 is not leap.
- * If div by 4 and not 100 is surely leap.
- * If div by 100 *and* 400 is not leap.
- * If div by 100 and not by 400 is leap.
- */
-#define YEAR_IS_LEAPYEAR(year) ((year) % 4 ? 0 : ((year) % 100 ? 1 : ((year) % 400 ? 0 : 1)))
-#define SECONDS_PER_MINUTE ((time_t)60)
-#define SECONDS_PER_HOUR ((time_t)3600)
-#define SECONDS_PER_DAY ((time_t)86400)
-
-    /* We need to calculate in which month and day of the month we are. To do
-     * so we need to skip days according to how many days there are in each
-     * month, and adjust for the leap year that has one more day in February.
-     */
-    static const int mean_mdays[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    static const int leap_mdays[12] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-
-    /* Adjust for timezone. 0 for UTC */
-    t -= tz;
-
-    /* Adjust for daylight time. 0 default */
-    t += 3600 * dst;
-
-    /* Days passed since epoch. */
-    int64_t days = t / SECONDS_PER_DAY;
-
-    /* Remaining seconds. */
-    int64_t seconds = t % SECONDS_PER_DAY;
-
-    loc->tm_isdst = dst;
-    loc->tm_hour = (int)(seconds / SECONDS_PER_HOUR);
-    loc->tm_min = (int)((seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
-    loc->tm_sec = (int)((seconds % SECONDS_PER_HOUR) % SECONDS_PER_MINUTE);
-
-    /* 1/1/1970 was a Thursday, that is, day 4 from the POV of the tm structure
-     * where sunday = 0, so to calculate the day of the week we have to add 4
-     * and take the modulo by 7. */
-    loc->tm_wday = (int)((days + 4) % 7);
-
-    /* Calculate the current year. */
-    loc->tm_year = 1970;
-
-    while (1) {
-        /* Leap years have one day more. */
-        int64_t days_this_year = 365 + YEAR_IS_LEAPYEAR(loc->tm_year);
-        if (days_this_year > days)
-            break;
-        days -= days_this_year;
-        loc->tm_year++;
-    }
-
-    /* Number of day of the current year. */
-    loc->tm_yday = (int)days;
-    loc->tm_mon = 0;
-
-    if (YEAR_IS_LEAPYEAR(loc->tm_year)) {
-        while (days >= leap_mdays[loc->tm_mon]) {
-            days -= leap_mdays[loc->tm_mon];
-            loc->tm_mon++;
-        }
-    } else {
-        while (days >= mean_mdays[loc->tm_mon]) {
-            days -= mean_mdays[loc->tm_mon];
-            loc->tm_mon++;
-        }
-    }
-
-    /* Add 1 since our 'days' is zero-based. */
-    loc->tm_mday = (int)(days + 1);
-
-    /* Surprisingly tm_year is year-1900. */
-    loc->tm_year -= 1900;
-
-#undef SECONDS_PER_MINUTE
-#undef SECONDS_PER_HOUR
-#undef SECONDS_PER_DAY
-#undef YEAR_IS_LEAPYEAR
-}
-
-
-NOWARNING_UNUSED(static)
-sb8 difftime_msec(const struct timespec *oldtms, const struct timespec *newtms)
-{
-    sb8 sec = 0;
-    sb8 nsec = 0;
-
-    if (!oldtms && !newtms) {
-        /* get current timestamp in ms */
-        struct timespec now;
-        getnowtimeofday(&now);
-        sec = now.tv_sec;
-        nsec = now.tv_nsec;
-    } else if (oldtms && newtms) {
-        sec = (sb8)(newtms->tv_sec - oldtms->tv_sec);
-        nsec = (sb8)(newtms->tv_nsec - oldtms->tv_nsec);
-    } else if (newtms) {
-        sec = (sb8)(newtms->tv_sec);
-        nsec = (sb8)(newtms->tv_nsec);
-    } else if (oldtms) {
-        sec = (sb8)(oldtms->tv_sec);
-        nsec = (sb8)(oldtms->tv_nsec);
-    }
-
-    if (sec > 0) {
-        if (nsec >= 0) {
-            return ((sec * 1000UL) + nsec / 1000000UL);
-        } else { /* nsec < 0 */
-            return (sec - 1) * 1000UL + (nsec + 1000000000UL) / 1000000UL;
-        }
-    } else if (sec < 0) {
-        if (nsec <= 0) {
-            return ((sec * 1000UL) + nsec / 1000000UL);
-        } else{ /* nsec > 0 */
-            return (sec + 1) * 1000UL + (nsec - 1000000000UL) / 1000000UL;
-        }
-    } else { /* sec = 0 */
-        return nsec / 1000000UL;
-    }
-}
-
-
-NOWARNING_UNUSED(static)
-const char * format_nowtimeofday (char *datefmt)
-{
-    struct timespec now;
-    struct tm loc;
-
-    getnowtimeofday(&now);
-    getlocaltime_safe(&loc, now.tv_sec, 0, 0);
-
-    snprintf_chkd_V1(datefmt, 24, "%04d-%02d-%02d %02d:%02d:%02d UTC", loc.tm_year + 1900, loc.tm_mon + 1, loc.tm_mday, loc.tm_hour, loc.tm_min, loc.tm_sec);
-
-    datefmt[23] = 0;
-    return datefmt;
-}
 
 
 /**
@@ -468,6 +162,12 @@ filehandle_t file_open_read(const char *pathname)
 }
 
 NOWARNING_UNUSED(static)
+filehandle_t file_write_new(const char *pathname)
+{
+    return file_create(pathname, GENERIC_WRITE, FILE_ATTRIBUTE_NORMAL);
+}
+
+NOWARNING_UNUSED(static)
 int file_close(filehandle_t *phf)
 {
     if (phf) {
@@ -482,6 +182,31 @@ int file_close(filehandle_t *phf)
         }
     }
     return (-1);
+}
+
+NOWARNING_UNUSED(static)
+sb8 file_seek(filehandle_t hf, sb8 distance, int fseekpos)
+{
+    LARGE_INTEGER li;
+    li.QuadPart = distance;
+    if (SetFilePointerEx(hf, li, &li, fseekpos)) {
+        return (sb8)li.QuadPart;
+    }
+    /* error */
+    return (sb8)(-1);
+}
+
+NOWARNING_UNUSED(static)
+sb8 file_size(filehandle_t hf)
+{
+    LARGE_INTEGER li;
+    if (GetFileSizeEx(hf, &li)) {
+        /* success */
+        return (sb8)li.QuadPart;
+    }
+
+    /* error */
+    return (sb8)(-1);
 }
 
 NOWARNING_UNUSED(static)
@@ -566,9 +291,8 @@ int pathfile_move(const char *pathnameOld, const char *pathnameNew)
     return MoveFileA(pathnameOld, pathnameNew);
 }
 
-#else
+#else /* Linux? */
 
-/* Linux? */
 NOWARNING_UNUSED(static)
 filehandle_t file_create(const char *pathname, int flags, int mode)
 {
@@ -584,6 +308,12 @@ filehandle_t file_open_read(const char *pathname)
 }
 
 NOWARNING_UNUSED(static)
+filehandle_t file_write_new(const char *pathname)
+{
+    return file_create(pathname, O_WRONLY, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+}
+
+NOWARNING_UNUSED(static)
 int file_close(filehandle_t *phf)
 {
     if (phf) {
@@ -596,6 +326,17 @@ int file_close(filehandle_t *phf)
         }
     }
     return (-1);
+}
+
+NOWARNING_UNUSED(static)
+sb8 file_seek(filehandle_t hf, sb8 distance, int fseekpos)
+{
+    #ifdef WIN32
+        /* warning: cygwin */
+        return  (sb8) lseek(hf, distance, fseekpos);
+    #else
+        return (sb8) lseek64(hf, (off64_t)distance, fseekpos);
+    #endif
 }
 
 NOWARNING_UNUSED(static)
@@ -762,7 +503,7 @@ cstrbuf find_config_pathfile(const char *cfgpath, const char *cfgname, const cha
             }
         }
 
-        printf("[misc.h:%d] check config: %.*s\n", __LINE__, cstrbufGetLen(config), cstrbufGetStr(config));
+        printf("(misc.h:%d) [%d] check config: %.*s\n", __LINE__, getprocessid(), cstrbufGetLen(config), cstrbufGetStr(config));
         goto finish_up;
     } else {
         char *p;
@@ -772,9 +513,9 @@ cstrbuf find_config_pathfile(const char *cfgpath, const char *cfgname, const cha
         config = cstrbufConcat(dname, pname, 0);
 
         if (config) {
-            printf("[misc.h:%d] check config: %.*s\n", __LINE__, cstrbufGetLen(config), cstrbufGetStr(config));
+            printf("(misc.h:%d) [%d] check config: %.*s\n", __LINE__, getprocessid(), cstrbufGetLen(config), cstrbufGetStr(config));
         } else {
-            printf("[misc.h:%d] null config\n", __LINE__);
+            printf("(misc.h:%d) [%d] null config\n", __LINE__, getprocessid());
         }
 
         if (pathfile_exists(config->str)) {
@@ -784,7 +525,7 @@ cstrbuf find_config_pathfile(const char *cfgpath, const char *cfgname, const cha
 
         // 2: "$(appbin_dir)/conf/clogger.cfg"
         config = cstrbufCat(0, "%.*s%cconf%.*s", cstrbufGetLen(dname), cstrbufGetStr(dname), PATH_SEPARATOR_CHAR, cstrbufGetLen(pname), cstrbufGetStr(pname));
-        printf("[misc.h:%d] check config: %.*s\n", __LINE__, cstrbufGetLen(config), cstrbufGetStr(config));
+        printf("(misc.h:%d) [%d] check config: %.*s\n", __LINE__, getprocessid(), cstrbufGetLen(config), cstrbufGetStr(config));
         if (pathfile_exists(config->str)) {
             goto finish_up;
         }
@@ -797,9 +538,9 @@ cstrbuf find_config_pathfile(const char *cfgpath, const char *cfgname, const cha
             config = cstrbufCat(config, "%cconf%.*s", PATH_SEPARATOR_CHAR, cstrbufGetLen(pname), cstrbufGetStr(pname));
 
             if (config) {
-                printf("[misc.h:%d] check config: %.*s\n", __LINE__, cstrbufGetLen(config), cstrbufGetStr(config));
+                printf("(misc.h:%d) [%d] check config: %.*s\n", __LINE__, getprocessid(), cstrbufGetLen(config), cstrbufGetStr(config));
             } else {
-                printf("[misc.h:%d] null config\n", __LINE__);
+                printf("(misc.h:%d) [%d] null config\n", __LINE__, getprocessid());
             }
 
             if (pathfile_exists(config->str)) {
@@ -810,7 +551,7 @@ cstrbuf find_config_pathfile(const char *cfgpath, const char *cfgname, const cha
 
         if (envvarname) {
             // 4: $CLOGGER_CONF=/path/to/clogger.cfg
-            printf("[misc.h:%d] check environment: %s\n", __LINE__, envvarname);
+            printf("(misc.h:%d) [%d] check environment: %s\n", __LINE__, getprocessid(), envvarname);
 
             p = getenv(envvarname);
             if (p) {
@@ -819,7 +560,7 @@ cstrbuf find_config_pathfile(const char *cfgpath, const char *cfgname, const cha
 
                 if (cstr_endwith(config->str, config->len, pname->str, (int)pname->len) ||
                     cstr_endwith(config->str, config->len, tname->str, (int)tname->len)) {
-                    printf("[misc.h:%d] check config: %.*s\n", __LINE__, cstrbufGetLen(config), cstrbufGetStr(config));
+                    printf("(misc.h:%d) [%d] check config: %.*s\n", __LINE__, getprocessid(), cstrbufGetLen(config), cstrbufGetStr(config));
                     goto finish_up;
                 }
 
@@ -830,16 +571,16 @@ cstrbuf find_config_pathfile(const char *cfgpath, const char *cfgname, const cha
                     config = cstrbufCat(config, "%.*s", cstrbufGetLen(pname), cstrbufGetStr(pname));
                 }
 
-                printf("[misc.h:%d] check config: %.*s\n", __LINE__, cstrbufGetLen(config), cstrbufGetStr(config));
+                printf("(misc.h:%d) [%d] check config: %.*s\n", __LINE__, getprocessid(), cstrbufGetLen(config), cstrbufGetStr(config));
                 goto finish_up;
             }
         }
 
         if (etcconfpath) {
-            printf("[misc.h:%d] check os path: %s\n", __LINE__, etcconfpath);
+            printf("(misc.h:%d) [%d] check os path: %s\n", __LINE__, getprocessid(), etcconfpath);
 
             config = cstrbufCat(0, "%s%.*s", etcconfpath, cstrbufGetLen(pname), cstrbufGetStr(pname));
-            printf("[misc.h:%d] check config: %.*s\n", __LINE__, cstrbufGetLen(config), cstrbufGetStr(config));
+            printf("(misc.h:%d) [%d] check config: %.*s\n", __LINE__, getprocessid(), cstrbufGetLen(config), cstrbufGetStr(config));
             goto finish_up;
         }
     }

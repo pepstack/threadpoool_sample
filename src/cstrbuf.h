@@ -30,7 +30,7 @@
  * @author     Liang Zhang <350137278@qq.com>
  * @version    0.0.10
  * @create     2017-08-28 11:12:10
- * @update     2020-12-12 17:20:46
+ * @update     2020-01-12 17:20:46
  */
 #ifndef _CSTRBUF_H_
 #define _CSTRBUF_H_
@@ -55,7 +55,13 @@ extern "C"
 #define cstr_bool_true   1
 #define cstr_bool_false  0
 
-#define cstr_length(str, maxlen)    ((int)((str)==NULL? 0: ((maxlen)==-1? strlen(str) : strnlen(str, maxlen))))
+#define cstr_length(str, maxlen)    ((int)((str)==NULL? 0: ((int)(maxlen)==(-1)? strlen(str) : strnlen(str, (int)(maxlen)))))
+
+#define cstr_copybuf(dstbuf, src)   \
+    snprintf_chkd_V1(dstbuf, sizeof(dstbuf), "%.*s", (int)strnlen(src, sizeof(dstbuf) - 1), (const char *)(src))
+
+#define cstr_copybuf_len(dstbuf, src, srclen)   \
+    snprintf_chkd_V1(dstbuf, sizeof(dstbuf), "%.*s", (int)(((int)(srclen)) < ((int)sizeof(dstbuf))? (srclen) : (sizeof(dstbuf) - 1)), (const char *)(src))
 
 
 NOWARNING_UNUSED(static)
@@ -1743,7 +1749,7 @@ cstrbuf cstrbufConcat (const cstrbuf start, ...)
         result = cstrbufCat(result, "%.*s", cstrbufGetLen(src), cstrbufGetStr(src));
         src = va_arg(argp, cstrbuf);
     } while(src);
- 
+
     va_end(argp);
     return result;
 }

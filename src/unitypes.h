@@ -1,5 +1,5 @@
 /***********************************************************************
-* Copyright (c) 2008-2080 syna-tech.com, pepstack.com, 350137278@qq.com
+* Copyright (c) 2008-2080 cheungmine, pepstack.com, 350137278@qq.com
 *
 * ALL RIGHTS RESERVED.
 *
